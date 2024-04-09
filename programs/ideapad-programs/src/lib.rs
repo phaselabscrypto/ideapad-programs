@@ -4,9 +4,12 @@ use anchor_lang::{prelude::*, solana_program::stake::state::Stake};
 
 declare_id!("49KpHHeP9Hx2TBnHYLZvVYTpc1q2bt2NTvZdr4bMfFea");
 
-
 mod error;
-use anchor_spl::{associated_token::AssociatedToken, metadata::Metadata, token::{Mint, Token, TokenAccount}};
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    metadata::Metadata,
+    token::{Mint, Token, TokenAccount},
+};
 use error::IdeaPadErrorCode;
 #[program]
 pub mod ideapad_programs {
@@ -35,66 +38,74 @@ pub mod ideapad_programs {
         let bump = ctx.bumps.project;
 
         let init_pool_ix = spl_stake_pool::instruction::initialize(
-            &ctx.accounts.stake_pool_program.key(), 
-            &ctx.accounts.stake_pool.key(), 
-            &ctx.accounts.stake_pool_manager.key(), 
-            &ctx.accounts.stake_pool_manager.key(), 
-            &ctx.accounts.stake_pool_withdrawal_authority.key(), 
-            &ctx.accounts.validator_list.key(), 
-            &ctx.accounts.reserve_stake.key(), 
-            &ctx.accounts.pool_mint.key(), 
-            &ctx.accounts.project_fee_account.key(), 
-            &ctx.accounts.token_program.key(), 
-            None, 
+            &ctx.accounts.stake_pool_program.key(),
+            &ctx.accounts.stake_pool.key(),
+            &ctx.accounts.stake_pool_manager.key(),
+            &ctx.accounts.stake_pool_manager.key(),
+            &ctx.accounts.stake_pool_withdrawal_authority.key(),
+            &ctx.accounts.validator_list.key(),
+            &ctx.accounts.reserve_stake.key(),
+            &ctx.accounts.pool_mint.key(),
+            &ctx.accounts.project_fee_account.key(),
+            &ctx.accounts.token_program.key(),
+            None,
             Fee {
                 denominator: 1,
-                numerator: 1
-            }, 
+                numerator: 1,
+            },
             Fee {
                 denominator: 0,
-                numerator:0
-            }, 
+                numerator: 0,
+            },
             Fee {
                 denominator: 0,
-                numerator: 0
-            }, 
-            0, 
-            1
+                numerator: 0,
+            },
+            0,
+            1,
         );
 
         invoke_signed(
-            &init_pool_ix, 
+            &init_pool_ix,
             &[
                 ctx.accounts.stake_pool.to_account_info(),
                 ctx.accounts.stake_pool_manager.to_account_info(),
                 ctx.accounts.stake_pool_manager.to_account_info(),
-                ctx.accounts.stake_pool_withdrawal_authority.to_account_info(),
+                ctx.accounts
+                    .stake_pool_withdrawal_authority
+                    .to_account_info(),
                 ctx.accounts.validator_list.to_account_info(),
                 ctx.accounts.reserve_stake.to_account_info(),
                 ctx.accounts.pool_mint.to_account_info(),
                 ctx.accounts.project_fee_account.to_account_info(),
-                ctx.accounts.token_program.to_account_info()
-            ], 
-            &[&[b"pool_manager".as_ref(), &ctx.accounts.project.key().to_bytes(), &[bump]]]
+                ctx.accounts.token_program.to_account_info(),
+            ],
+            &[&[
+                b"pool_manager".as_ref(),
+                &ctx.accounts.project.key().to_bytes(),
+                &[bump],
+            ]],
         )?;
 
         let add_validator_ix = spl_stake_pool::instruction::add_validator_to_pool(
-            &ctx.accounts.stake_pool_program.key(), 
-            &ctx.accounts.stake_pool.key(), 
-            &ctx.accounts.stake_pool_withdrawal_authority.key(), 
-            &ctx.accounts.reserve_stake.key(), 
-            &ctx.accounts.stake_pool_withdrawal_authority.key(), 
-            &ctx.accounts.validator_list.key(), 
-            &ctx.accounts.stake_account.key(), 
-            &ctx.accounts.phase_validator.key(), 
-            None
+            &ctx.accounts.stake_pool_program.key(),
+            &ctx.accounts.stake_pool.key(),
+            &ctx.accounts.stake_pool_withdrawal_authority.key(),
+            &ctx.accounts.reserve_stake.key(),
+            &ctx.accounts.stake_pool_withdrawal_authority.key(),
+            &ctx.accounts.validator_list.key(),
+            &ctx.accounts.stake_account.key(),
+            &ctx.accounts.phase_validator.key(),
+            None,
         );
 
         invoke_signed(
-            &add_validator_ix, 
+            &add_validator_ix,
             &[
                 ctx.accounts.stake_pool.to_account_info(),
-                ctx.accounts.stake_pool_withdrawal_authority.to_account_info(),
+                ctx.accounts
+                    .stake_pool_withdrawal_authority
+                    .to_account_info(),
                 ctx.accounts.reserve_stake.to_account_info(),
                 ctx.accounts.validator_list.to_account_info(),
                 ctx.accounts.stake_account.to_account_info(),
@@ -105,11 +116,13 @@ pub mod ideapad_programs {
                 ctx.accounts.stake_config.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
                 ctx.accounts.stake_program.to_account_info(),
-            ], 
-            &[&[b"pool_manager".as_ref(), &ctx.accounts.project.key().to_bytes(), &[bump]]]
+            ],
+            &[&[
+                b"pool_manager".as_ref(),
+                &ctx.accounts.project.key().to_bytes(),
+                &[bump],
+            ]],
         )?;
-
-
 
         Ok(())
     }
@@ -121,53 +134,60 @@ pub mod ideapad_programs {
         quantity: Option<u32>,
         bump: u8,
     ) -> Result<()> {
-        
-        ctx.accounts.contribution_reward.init(reward_type, ctx.accounts.project.key(), ctx.accounts.reward_collection_mint.key(), cost, quantity, bump)?;
+        ctx.accounts.contribution_reward.init(
+            reward_type,
+            ctx.accounts.project.key(),
+            ctx.accounts.reward_collection_mint.key(),
+            cost,
+            quantity,
+            bump,
+        )?;
 
         Ok(())
     }
 
-
-    pub fn deposit_sol<'info>(
-        ctx: Context<DepositSol>
-    ) -> Result<()>{
-
-        // Blazesol for demo
+    // TODO add deposit authority so we can gate deposit through our program
+    pub fn deposit_sol<'info>(ctx: Context<DepositSol>) -> Result<()> {
         let stake_pool = ctx.accounts.stake_pool.key();
         let reserve_stake_account = ctx.accounts.reserve_stake_account.key();
         let manager_account = ctx.accounts.manager_account.key();
         let pool_mint = ctx.accounts.pool_mint.key();
         let stake_pool_withdrawal_authority = ctx.accounts.stake_pool_withdrawal_authority.key();
 
-        let instruction = spl_stake_pool::instruction::deposit_sol(&spl_stake_pool::id(), &stake_pool, &stake_pool_withdrawal_authority, &reserve_stake_account, &ctx.accounts.payer.key(), &ctx.accounts.lst_token_account.key(), &manager_account, &ctx.accounts.lst_token_account.key(), &pool_mint, &ctx.accounts.token_program.key(), ctx.accounts.contribution_reward.cost);
+        let instruction = spl_stake_pool::instruction::deposit_sol(
+            &spl_stake_pool::id(),
+            &stake_pool,
+            &stake_pool_withdrawal_authority,
+            &reserve_stake_account,
+            &ctx.accounts.payer.key(),
+            &ctx.accounts.lst_token_account.key(),
+            &manager_account,
+            &ctx.accounts.lst_token_account.key(),
+            &pool_mint,
+            &ctx.accounts.token_program.key(),
+            ctx.accounts.contribution_reward.cost,
+        );
 
         let account = [
             ctx.accounts.stake_pool.to_account_info(),
-            ctx.accounts.stake_pool_withdrawal_authority.to_account_info(),
+            ctx.accounts
+                .stake_pool_withdrawal_authority
+                .to_account_info(),
             ctx.accounts.reserve_stake_account.to_account_info(),
             ctx.accounts.payer.to_account_info(),
             ctx.accounts.lst_token_account.to_account_info(),
             ctx.accounts.manager_account.to_account_info(),
             // ctx.accounts.
         ];
-        
 
         Ok(())
     }
 
-
-    pub fn change_state<'info>(
-        ctx: Context<ChangeState>,
-        state: ProjectState
-    ) -> Result<()>{
-        
+    pub fn change_state<'info>(ctx: Context<ChangeState>, state: ProjectState) -> Result<()> {
         ctx.accounts.project.state = state;
 
         Ok(())
     }
-
-    
-
 }
 
 #[derive(Accounts)]
@@ -195,7 +215,7 @@ pub struct CreateProject<'info> {
         bump,
         space = PoolManager::space()
     )]
-    pub stake_pool_manager : Account<'info, PoolManager>,
+    pub stake_pool_manager: Account<'info, PoolManager>,
 
     #[account(
         // mint::authority = Pubkey::from_str("bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1").unwrap()
@@ -212,7 +232,7 @@ pub struct CreateProject<'info> {
 
     pub reserve_stake_account: AccountInfo<'info>,
     pub manager_account: AccountInfo<'info>,
-    pub stake_pool_withdrawal_authority : AccountInfo<'info>,
+    pub stake_pool_withdrawal_authority: AccountInfo<'info>,
 
     pub stake_account: AccountInfo<'info>,
     pub phase_validator: AccountInfo<'info>,
@@ -271,7 +291,7 @@ pub struct CreateContributionReward<'info> {
 
     pub token_program: Program<'info, Token>,
     pub token_metadata: Program<'info, Metadata>,
-    pub system_program: Program<'info, System>
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -310,13 +330,13 @@ pub struct DepositSol<'info> {
     #[account(
         init,
         payer = payer,
-        associated_token::mint = reward_collection_mint,
+        associated_token::mint = pool_mint,
         associated_token::authority = stake_vault
     )]
     pub lst_token_account: Account<'info, TokenAccount>,
 
     #[account(
-        mint::authority = Pubkey::from_str("bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1").unwrap()
+        address = project.lst_mint 
     )]
     pub pool_mint: Account<'info, Mint>,
 
@@ -324,20 +344,20 @@ pub struct DepositSol<'info> {
 
     pub reserve_stake_account: AccountInfo<'info>,
     pub manager_account: AccountInfo<'info>,
-    pub stake_pool_withdrawal_authority : AccountInfo<'info>,
-    
+    pub stake_pool_withdrawal_authority: AccountInfo<'info>,
+
     pub associated_token_program: Program<'info, AssociatedToken>,
 
     pub token_program: Program<'info, Token>,
     pub token_metadata: Program<'info, Metadata>,
-    pub system_program: Program<'info, System>
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct ChangeState<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
-    
+
     pub authority: Signer<'info>,
 
     #[account(
@@ -349,8 +369,6 @@ pub struct ChangeState<'info> {
 
     pub system_program: Program<'info, System>,
 }
-
-
 
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ProjectState {
@@ -421,7 +439,6 @@ impl Project {
             .checked_add(1)
             .ok_or(IdeaPadErrorCode::NumericalOverflow.into())
     }
-
 }
 
 // Nice in theory probably has to be fleshed out a bit more
@@ -439,7 +456,7 @@ pub struct ContributionReward {
     pub reward_collection_mint: Pubkey,
     pub cost: u64,
     pub quantity: Option<u32>, // if None it is unlimited
-    pub bump: u8
+    pub bump: u8,
 }
 
 impl ContributionReward {
@@ -472,16 +489,11 @@ pub struct StakeVault {
     pub project: Pubkey,
     pub staker: Pubkey,
     pub is_claimed: bool,
-    pub bump: u8
+    pub bump: u8,
 }
 
 impl StakeVault {
-    pub fn init(
-        &mut self,
-        project: Pubkey,
-        staker: Pubkey,
-        bump : i8
-    ) -> Result<()> {
+    pub fn init(&mut self, project: Pubkey, staker: Pubkey, bump: i8) -> Result<()> {
         self.project = project;
         self.staker = staker;
         Ok(())
@@ -490,22 +502,16 @@ impl StakeVault {
     pub fn space() -> usize {
         8 + 32 + 32 + 1
     }
-
 }
 
 #[account]
 pub struct PoolManager {
     pub project: Pubkey,
-    pub bump: u8
+    pub bump: u8,
 }
 
 impl PoolManager {
-    pub fn init(
-        &mut self,
-        project: Pubkey,
-        staker: Pubkey,
-        bump : i8
-    ) -> Result<()> {
+    pub fn init(&mut self, project: Pubkey, staker: Pubkey, bump: i8) -> Result<()> {
         self.project = project;
         Ok(())
     }
@@ -513,8 +519,4 @@ impl PoolManager {
     pub fn space() -> usize {
         8 + 32 + 1
     }
-
 }
-
-
-
