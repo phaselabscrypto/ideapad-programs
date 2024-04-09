@@ -511,6 +511,24 @@ pub struct ChangeState<'info> {
     pub system_program: Program<'info, System>,
 }
 
+
+#[derive(Accounts)]
+pub struct ClaimBack<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    pub authority: Signer<'info>,
+
+    #[account(
+        has_one = authority,
+        seeds = [b"project", project.seed.as_slice()],
+        bump = project.bump
+    )]
+    pub project: Account<'info, Project>,
+
+    pub system_program: Program<'info, System>,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ProjectState {
     Draft,
