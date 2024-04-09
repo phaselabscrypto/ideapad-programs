@@ -1,20 +1,22 @@
 use std::{mem, str::FromStr};
 
-use anchor_lang::{prelude::*, solana_program::stake::state::Stake};
+use anchor_lang::{prelude::*, anchor_lang::solana_program::stake::state::Stake};
 
 declare_id!("49KpHHeP9Hx2TBnHYLZvVYTpc1q2bt2NTvZdr4bMfFea");
 
 mod error;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    metadata::Metadata,
+    metadata::{Metadata, MetadataAccount},
     token::{Mint, Token, TokenAccount},
 };
+
 use error::IdeaPadErrorCode;
+
 #[program]
 pub mod ideapad_programs {
 
-    use anchor_lang::solana_program::program::invoke_signed;
+    use anchor_lang::solana_program::program::{invoke, invoke_signed};
     use spl_stake_pool::state::Fee;
 
     use super::*;
@@ -147,6 +149,11 @@ pub mod ideapad_programs {
     }
 
     // TODO add deposit authority so we can gate deposit through our program
+
+    /*
+        Deposits sol into validator, mints lst to program owned account. Mints Nft for redeeming amount to user.
+        Lst yeild is sent to sent to the a projects token account not owned by the program.
+     */
     pub fn deposit_sol<'info>(ctx: Context<DepositSol>) -> Result<()> {
         let stake_pool = ctx.accounts.stake_pool.key();
         let reserve_stake_account = ctx.accounts.reserve_stake_account.key();
@@ -168,7 +175,7 @@ pub mod ideapad_programs {
             ctx.accounts.contribution_reward.cost,
         );
 
-        let account = [
+        let accounts = [
             ctx.accounts.stake_pool.to_account_info(),
             ctx.accounts
                 .stake_pool_withdrawal_authority
@@ -176,9 +183,101 @@ pub mod ideapad_programs {
             ctx.accounts.reserve_stake_account.to_account_info(),
             ctx.accounts.payer.to_account_info(),
             ctx.accounts.lst_token_account.to_account_info(),
-            ctx.accounts.manager_account.to_account_info(),
-            // ctx.accounts.
+            ctx.accounts.project_fee_account.to_account_info(),
+            ctx.accounts.project_fee_account.to_account_info(),
+            ctx.accounts.pool_mint.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+            ctx.accounts.token_program.to_account_info()
         ];
+
+        invoke(&instruction, &accounts)?;
+
+        let mint_to_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::MintTo {
+                mint: ctx.accounts.nft_mint.to_account_info(),
+                to: ctx.accounts.nft_token_account.to_account_info(),
+                authority: ctx.accounts.warp.to_account_info(),
+            },
+            &signers,
+        );
+    
+        anchor_spl::token::mint_to(mint_to_context, 1)?;
+    
+        let create_metadata_context = CpiContext::new_with_signer(
+            ctx.accounts.token_metadata.to_account_info(),
+            CreateMetadataAccountsV3 {
+                metadata: ctx.accounts.nft_metadata.to_account_info(),
+                mint: ctx.accounts.nft_mint.to_account_info(),
+                mint_authority: ctx.accounts.warp.to_account_info(),
+                payer: ctx.accounts.payer.to_account_info(),
+                update_authority: ctx.accounts.warp.to_account_info(),
+                system_program: ctx.accounts.system_program.to_account_info(),
+                rent: ctx.accounts.rent.to_account_info(),
+            },
+            &signers,
+        );
+    
+        let uri = ctx
+            .accounts
+            .warp
+            .nft_uri
+            .clone()
+            .unwrap_or(ctx.accounts.collection_metadata.data.uri.clone());
+    
+        anchor_spl::metadata::create_metadata_accounts_v3(
+            create_metadata_context,
+            DataV2 {
+                name: ctx.accounts.collection_metadata.data.name.clone(),
+                symbol: ctx.accounts.collection_metadata.data.symbol.clone(),
+                uri,
+                seller_fee_basis_points: ctx
+                    .accounts
+                    .collection_metadata
+                    .data
+                    .seller_fee_basis_points,
+                creators: Some(vec![MetadataCreator::default().into()]),
+                collection: None,
+                uses: None,
+            },
+            true,
+            true,
+            None,
+        )?;
+    
+        let create_master_edition_context = CpiContext::new_with_signer(
+            ctx.accounts.token_metadata.to_account_info(),
+            CreateMasterEditionV3 {
+                metadata: ctx.accounts.nft_metadata.to_account_info(),
+                mint: ctx.accounts.nft_mint.to_account_info(),
+                mint_authority: ctx.accounts.warp.to_account_info(),
+                payer: ctx.accounts.payer.to_account_info(),
+                update_authority: ctx.accounts.warp.to_account_info(),
+                system_program: ctx.accounts.system_program.to_account_info(),
+                rent: ctx.accounts.rent.to_account_info(),
+                edition: ctx.accounts.nft_master_edition.to_account_info(),
+                token_program: ctx.accounts.token_program.to_account_info(),
+            },
+            &signers,
+        );
+    
+        anchor_spl::metadata::create_master_edition_v3(create_master_edition_context, Some(0))?;
+    
+        let set_and_verify_context = CpiContext::new_with_signer(
+            ctx.accounts.token_metadata.to_account_info(),
+            SetAndVerifySizedCollectionItem {
+                metadata: ctx.accounts.nft_metadata.to_account_info(),
+                collection_authority: ctx.accounts.warp.to_account_info(),
+                payer: ctx.accounts.payer.to_account_info(),
+                update_authority: ctx.accounts.warp.to_account_info(),
+                collection_mint: ctx.accounts.collection_mint.to_account_info(),
+                collection_metadata: ctx.accounts.collection_metadata.to_account_info(),
+                collection_master_edition: ctx.accounts.collection_master_edition.to_account_info(),
+            },
+            &signers,
+        );
+    
+        anchor_spl::metadata::set_and_verify_sized_collection_item(set_and_verify_context, None)?;
 
         Ok(())
     }
@@ -188,6 +287,8 @@ pub mod ideapad_programs {
 
         Ok(())
     }
+
+
 }
 
 #[derive(Accounts)]
@@ -299,11 +400,10 @@ pub struct DepositSol<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
-    pub authority: Signer<'info>,
+    pub wallet: Signer<'info>,
 
     #[account(
-        mut,
-        has_one = authority
+        mut
     )]
     pub project: Account<'info, Project>,
 
@@ -320,12 +420,46 @@ pub struct DepositSol<'info> {
     pub reward_collection_mint: Account<'info, Mint>,
 
     #[account(
+        init,
+        payer = payer,
         associated_token::mint = reward_collection_mint,
-        associated_token::authority = authority
+        associated_token::authority = wallet
     )]
-    pub reward_collection_token_account: Box<Account<'info, TokenAccount>>,
+    pub reward_token_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        init,
+        payer = payer,
+        mint::decimals = 0,
+        mint::authority = contribution_reward,
+        mint::freeze_authority = contribution_reward
+    )]
+    pub nft_mint: Box<Account<'info, Mint>>,
+
+    /// CHECK inside instruction
+    #[account(
+        mut,
+        seeds = [b"metadata", Metadata::id().as_ref(), nft_mint.key().as_ref()],
+        bump,
+        seeds::program = Metadata::id(),
+        constraint = nft_metadata.collection.clone().unwrap().key == contribution_reward.reward_collection_mint,
+        constraint = nft_metadata.collection.clone().unwrap().verified == true
+    )]
+    pub nft_metadata: Account<'info, MetadataAccount>,
+
+
+    /// CHECK inside instruction
+    #[account(
+        mut,
+        seeds = [b"metadata", Metadata::id().as_ref(), nft_mint.key().as_ref(), b"edition"],
+        bump,
+        seeds::program = Metadata::id()
+    )]
+    pub nft_master_edition: AccountInfo<'info>,
 
     pub stake_vault: Account<'info, StakeVault>,
+
+    pub project_fee_account: Account<'info, TokenAccount>,
 
     #[account(
         init,
