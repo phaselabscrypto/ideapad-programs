@@ -288,6 +288,13 @@ pub mod ideapad_programs {
         Ok(())
     }
 
+    // Return LST to user that they can either continue to hold and support creator or 
+    // they can convert to sol from stakepool.
+    pub fn claim_back<'info>(ctx: Context<ClaimBack>) -> Result<()> {
+
+        Ok(())
+    }
+
 
 }
 
