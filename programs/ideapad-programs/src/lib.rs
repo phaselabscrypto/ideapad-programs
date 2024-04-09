@@ -1,6 +1,6 @@
 use std::{mem, str::FromStr};
 
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::stake::state::Stake};
 
 declare_id!("49KpHHeP9Hx2TBnHYLZvVYTpc1q2bt2NTvZdr4bMfFea");
 
@@ -10,6 +10,7 @@ use anchor_spl::{associated_token::AssociatedToken, metadata::Metadata, token::{
 use error::IdeaPadErrorCode;
 #[program]
 pub mod ideapad_programs {
+
     use anchor_lang::solana_program::program::invoke_signed;
     use spl_stake_pool::state::Fee;
 
@@ -25,6 +26,8 @@ pub mod ideapad_programs {
             ctx.accounts.authority.key(),
             redeemption_stamp,
             min_stake_amount,
+            ctx.accounts.stake_pool.key(),
+            ctx.accounts.pool_mint.key(),
             seed,
             ctx.bumps.project,
         )?;
@@ -35,7 +38,7 @@ pub mod ideapad_programs {
             &ctx.accounts.stake_pool_program.key(), 
             &ctx.accounts.stake_pool.key(), 
             &ctx.accounts.stake_pool_manager.key(), 
-            &ctx.accounts.stake_pool_withdrawal_authority.key(), 
+            &ctx.accounts.stake_pool_manager.key(), 
             &ctx.accounts.stake_pool_withdrawal_authority.key(), 
             &ctx.accounts.validator_list.key(), 
             &ctx.accounts.reserve_stake.key(), 
@@ -64,7 +67,7 @@ pub mod ideapad_programs {
             &[
                 ctx.accounts.stake_pool.to_account_info(),
                 ctx.accounts.stake_pool_manager.to_account_info(),
-                ctx.accounts.stake_pool_withdrawal_authority.to_account_info(),
+                ctx.accounts.stake_pool_manager.to_account_info(),
                 ctx.accounts.stake_pool_withdrawal_authority.to_account_info(),
                 ctx.accounts.validator_list.to_account_info(),
                 ctx.accounts.reserve_stake.to_account_info(),
@@ -75,7 +78,38 @@ pub mod ideapad_programs {
             &[&[b"pool_manager".as_ref(), &ctx.accounts.project.key().to_bytes(), &[bump]]]
         )?;
 
-        // let add_validator_ix = spl_stake_pool::instruction::add_
+        let add_validator_ix = spl_stake_pool::instruction::add_validator_to_pool(
+            &ctx.accounts.stake_pool_program.key(), 
+            &ctx.accounts.stake_pool.key(), 
+            &ctx.accounts.stake_pool_withdrawal_authority.key(), 
+            &ctx.accounts.reserve_stake.key(), 
+            &ctx.accounts.stake_pool_withdrawal_authority.key(), 
+            &ctx.accounts.validator_list.key(), 
+            &ctx.accounts.stake_account.key(), 
+            &ctx.accounts.phase_validator.key(), 
+            None
+        );
+
+        invoke_signed(
+            &add_validator_ix, 
+            &[
+                ctx.accounts.stake_pool.to_account_info(),
+                ctx.accounts.stake_pool_withdrawal_authority.to_account_info(),
+                ctx.accounts.reserve_stake.to_account_info(),
+                ctx.accounts.validator_list.to_account_info(),
+                ctx.accounts.stake_account.to_account_info(),
+                ctx.accounts.phase_validator.to_account_info(),
+                ctx.accounts.rent.to_account_info(),
+                ctx.accounts.clock.to_account_info(),
+                ctx.accounts.stake_history.to_account_info(),
+                ctx.accounts.stake_config.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+                ctx.accounts.stake_program.to_account_info(),
+            ], 
+            &[&[b"pool_manager".as_ref(), &ctx.accounts.project.key().to_bytes(), &[bump]]]
+        )?;
+
+
 
         Ok(())
     }
@@ -180,9 +214,17 @@ pub struct CreateProject<'info> {
     pub manager_account: AccountInfo<'info>,
     pub stake_pool_withdrawal_authority : AccountInfo<'info>,
 
+    pub stake_account: AccountInfo<'info>,
+    pub phase_validator: AccountInfo<'info>,
+
     pub stake_pool_program: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 
+    pub rent: Sysvar<'info, Rent>,
+    pub clock: Sysvar<'info, Clock>,
+    pub stake_history: Sysvar<'info, StakeHistory>,
+    pub stake_config: AccountInfo<'info>,
+    pub stake_program: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -349,6 +391,8 @@ impl Project {
         authority: Pubkey,
         redeemption_stamp: Option<i64>,
         min_stake_amount: u64,
+        stake_pool: Pubkey,
+        lst_mint: Pubkey,
         seed: Vec<u8>,
         bump: u8,
     ) -> Result<()> {
@@ -363,6 +407,8 @@ impl Project {
         self.raising_at = None;
         self.contribution_reward_count = 0;
         self.seed = seed;
+        self.stake_pool = stake_pool;
+        self.lst_mint = lst_mint;
         Ok(())
     }
 
